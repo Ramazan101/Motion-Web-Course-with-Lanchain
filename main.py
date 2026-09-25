@@ -1,29 +1,34 @@
 import os
 import uvicorn
 from dotenv import load_dotenv
-
-from langchain_core.prompts import ChatPromptTemplate
-# from langchain_core.runnables import RunnableLambda
-from langchain_groq import ChatGroq
-from langchain_core.output_parsers import StrOutputParser
-from langchain_community.document_loaders import TextLoader
-from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.vectorstores import InMemoryVectorStore
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from starlette import status
 
-# Document(
-#     page_content="Academy Motion Web - Programming course and design",
-#     metadata={"source": "text.txt"}
-# )
+from langchain_community.document_loaders import TextLoader
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_groq import ChatGroq
+from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+load_dotenv()
 
 loaders = TextLoader("text.txt", encoding="utf-8")
 document = loaders.load()
 
-load_dotenv()
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=300,
+    chunk_overlap=20,
+)
+chunks = text_splitter.split_documents(document)
+
+
+embeddings = FastEmbedEmbeddings(
+    model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+)
+
+vector_store = InMemoryVectorStore.from_documents(chunks, embeddings)
 
 llm = ChatGroq(
     model="openai/gpt-oss-20b",
@@ -32,53 +37,44 @@ llm = ChatGroq(
     max_tokens=1000,
 )
 
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=300,
-    chunk_over=20,
-)
-
-chunks = text_splitter.split_documents(document)
-
-embeddings = ?(
-    model="?"
-)
-
-InMemoryVectorStore.from_documents(chunks, embeddings)
-
-chat_prompt = ChatPromptTemplate(
+chat_prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "Ты онлайн менеджер Motion Web IT Academy",
-            "Должен отвечать на вопросы четко и коротко",
-            "При ответе ты должен сперва прочитать Базу Знаний",
-            "База Знаний {base_knowledge}",
-            "Если человек написал то чего нету в базе ты должен ответить что такая инфа у нас нету НО только на своем"
+            "Ты онлайн менеджер Motion Web IT Academy.\n"
+            "Должен отвечать на вопросы четко и коротко.\n"
+            "При ответе ты должен сперва прочитать Базу Знаний.\n"
+            "База Знаний:\n{base_knowledge}\n\n"
+            "Если человек спросил то, чего нет в базе, ответь своими словами, что такой информации у нас нет.",
         ),
-        "human",
-        "{content}"
+        ("human", "{content}"),
     ]
 )
 
-
 chain = chat_prompt | llm | StrOutputParser()
 
+test_app = FastAPI(title="Motion Web QA Bot")
 
-test_app = FastAPI()
 
 class QuestionSchema(BaseModel):
     question: str
 
+
 @test_app.post("/questions/")
 async def answer(data: QuestionSchema):
-    data = data.question.strip()
+    question_text = data.question.strip()
 
-    if not data:
+    if not question_text:
         raise HTTPException(status_code=400, detail="Information not correct!")
 
-    new_document = vector_store.asimilarity_search(data, k=2)
-    final_answer = chain.invoke({"content": data, "base_knowledge": new_document})
+    docs = await vector_store.asimilarity_search(question_text, k=2)
+    context = "\n\n".join([doc.page_content for doc in docs])
+
+    final_answer = await chain.ainvoke(
+        {"content": question_text, "base_knowledge": context}
+    )
     return {"answer": final_answer}
 
+
 if __name__ == "__main__":
-    uvicorn.run("main:test_app", host="127.0.0.1", port=8000)
+    uvicorn.run("main:test_app", host="127.0.0.1", port=8000, reload=True)
