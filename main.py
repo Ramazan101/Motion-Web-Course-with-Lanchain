@@ -41,11 +41,11 @@ chat_prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "Ты онлайн менеджер Motion Web IT Academy.\n"
-            "Должен отвечать на вопросы четко и коротко.\n"
-            "При ответе ты должен сперва прочитать Базу Знаний.\n"
-            "База Знаний:\n{base_knowledge}\n\n"
-            "Если человек спросил то, чего нет в базе, ответь своими словами, что такой информации у нас нет.",
+            "Ты менеджер по Кыргызскому красному книгу."
+            "Должен отвечать на вопросы четко и коротко."
+            "При ответе ты должен сперва прочитать Базу Знаний."
+            "База Знаний {base_knowledge}"
+            "Если человек спросил то, чего нет в базе, ответь своими словами, что такой информации у нас нет."
         ),
         ("human", "{content}"),
     ]
@@ -53,7 +53,7 @@ chat_prompt = ChatPromptTemplate.from_messages(
 
 chain = chat_prompt | llm | StrOutputParser()
 
-test_app = FastAPI(title="Motion Web QA Bot")
+test_app = FastAPI(title="Красная Книга Кыргызской Республики.")
 
 
 class QuestionSchema(BaseModel):
